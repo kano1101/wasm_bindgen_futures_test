@@ -42,6 +42,10 @@ fn run() {
         let origin = space::get().await;
         assert!(origin.is_some());
         log::debug!("ip.origin: {:?}", origin);
+
+        // 当然ですがコメントアウトを外すと、localhost:8080からの実行ではエラーになる
+        // しかし自動テストの方ではエラーにならない(処理が到達していないことがわかる)
+        // assert!(false);
     };
 
     wasm_bindgen_futures::spawn_local(fut());
