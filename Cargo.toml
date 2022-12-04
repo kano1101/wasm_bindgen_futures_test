@@ -1,0 +1,16 @@
+[package]
+name = "wasm_bindgen_futures_test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.66"
+console_error_panic_hook = "0.1.7"
+log = "0.4.6"
+once_cell = "1.16.0"
+reqwest = { version = "0.11.13", default-features = false, features = ["json"] }
+serde = { version = "1.0.148", features = ["derive"] }
+tokio = { version = "1.22.0", default-features = false, features = ["sync"] }
+wasm-bindgen-futures = "0.4.33"
+wasm-bindgen-test = "0.3.33"
+wasm-logger = "0.2.0"
