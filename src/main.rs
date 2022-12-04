@@ -50,6 +50,24 @@ mod space {
         }
     }
 
+    // use async_trait::async_trait;
+    // #[async_trait]
+    // trait Perform: 'static {
+    //     async fn run<F, R>(f: F) -> anyhow::Result<R>
+    //     where
+    //         F: std::future::Future;
+    // }
+
+    // impl Perform for Ip {
+    //     async fn run<F, R>(f: F) -> anyhow::Result<R>
+    //     where
+    //         F: std::future::Future,
+    //     {
+
+    //     }
+    // }
+
+    // static INSTANCE: Lazy<Mutex<Vec<&'static dyn Perform>>> = Lazy::new(|| Mutex::new(Vec::new()));
     static INSTANCE: Lazy<Mutex<Vec<Perform<String>>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
     pub async fn get() -> Perform<String> {
@@ -90,12 +108,15 @@ fn run() {
     log::warn!("some warn log");
     log::error!("some error log");
 
+    use space::Perform;
+    let mut origin: Perform<String> = Perform::None;
     let fut = || async move {
+        // let mut ip: Option<&dyn Perform> = None;
         assert!(space::get().await.is_none());
         assert!(space::add().await.is_ok());
         assert!(space::get().await.is_yet());
         assert!(space::pull().await.is_ok());
-        let origin = space::get().await;
+        origin = space::get().await;
         assert!(origin.is_already());
         log::debug!("ip.origin: {:?}", origin);
 
