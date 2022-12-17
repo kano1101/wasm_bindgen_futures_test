@@ -1,58 +1,57 @@
 use serde::Deserialize;
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Ip {
     origin: String,
 }
 
-mod space {
-    use once_cell::sync::Lazy;
-    use tokio::sync::Mutex;
-
-    static INSTANCE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
-
-    pub async fn pull() -> anyhow::Result<()> {
-        use super::Ip;
-        let response = reqwest::get("http://httpbin.org/ip")
-            .await?
-            .json::<Ip>()
-            .await?;
-        let mut lock = INSTANCE.lock().await;
-        *lock = Some(response.origin);
-        Ok(())
+struct Context {
+    hold_values: Vec<Ip>,
+}
+struct ContextIterator<'a> {
+    iter: std::slice::Iter<'a, Ip>,
+}
+impl<'a> Context {
+    fn new() -> Self {
+        Self {
+            hold_values: Vec::new(),
+        }
     }
-    pub async fn get() -> Option<String> {
-        let lock = INSTANCE.lock().await;
-        lock.clone()
+    fn add(&mut self, value: Ip) {
+        self.hold_values.push(value);
+    }
+    fn iter(&'a self) -> ContextIterator<'a> {
+        ContextIterator {
+            iter: self.hold_values.iter(),
+        }
+    }
+}
+impl<'a> Iterator for ContextIterator<'a> {
+    type Item = Ip;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().cloned()
     }
 }
 
-fn run() {
+async fn run() {
     console_error_panic_hook::set_once();
     wasm_logger::init(wasm_logger::Config::default());
 
-    log::trace!("some trace log");
-    log::debug!("some debug log");
-    log::info!("some info log");
-    log::warn!("some warn log");
-    log::error!("some error log");
+    let mut context = Context::new();
+    let ip = reqwest::get("http://httpbin.org/ip")
+        .await
+        .unwrap()
+        .json::<Ip>()
+        .await
+        .unwrap();
+    context.add(ip);
 
-    let fut = || async move {
-        assert!(space::get().await.is_none());
-        assert!(space::pull().await.is_ok());
-        let origin = space::get().await;
-        assert!(origin.is_some());
-        log::debug!("ip.origin: {:?}", origin);
-
-        // 当然ですがコメントアウトを外すと、localhost:8080からの実行ではエラーになる
-        // しかし自動テストの方ではエラーにならない(処理が到達していないことがわかる)
-        // assert!(false);
-    };
-
-    wasm_bindgen_futures::spawn_local(fut());
+    for ip in context.iter() {
+        log::debug!("ip.origin: {:?}", ip.origin);
+    }
 }
 
 fn main() {
-    run();
+    wasm_bindgen_futures::spawn_local(run());
 }
 
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -61,5 +60,5 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 async fn first_test() {
-    run();
+    run().await;
 }
