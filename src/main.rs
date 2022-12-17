@@ -1,135 +1,57 @@
 use serde::Deserialize;
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Ip {
     origin: String,
 }
 
-mod space {
-    use once_cell::sync::Lazy;
-    use tokio::sync::Mutex;
-
-    #[derive(Debug, Clone)]
-    pub enum Perform<T> {
-        None,
-        Yet(T),
-        Already(T),
-    }
-    impl<T> Default for Perform<T> {
-        fn default() -> Perform<T> {
-            Perform::None
+struct Context {
+    hold_values: Vec<Ip>,
+}
+struct ContextIterator<'a> {
+    iter: std::slice::Iter<'a, Ip>,
+}
+impl<'a> Context {
+    fn new() -> Self {
+        Self {
+            hold_values: Vec::new(),
         }
     }
-    impl<T> From<Perform<T>> for Option<T> {
-        fn from(from: Perform<T>) -> Option<T> {
-            let perform = from;
-            match perform {
-                Perform::None => Option::None,
-                Perform::Yet(_) => Option::None,
-                Perform::Already(t) => Some(t),
-            }
+    fn add(&mut self, value: Ip) {
+        self.hold_values.push(value);
+    }
+    fn iter(&'a self) -> ContextIterator<'a> {
+        ContextIterator {
+            iter: self.hold_values.iter(),
         }
     }
-    impl<T> Perform<T> {
-        pub fn is_none(&self) -> bool {
-            if let Perform::None = self {
-                return true;
-            }
-            return false;
-        }
-        pub fn is_yet(&self) -> bool {
-            if let Perform::Yet(_) = self {
-                return true;
-            }
-            return false;
-        }
-        pub fn is_already(&self) -> bool {
-            if let Perform::Already(_) = self {
-                return true;
-            }
-            return false;
-        }
-    }
-
-    // use async_trait::async_trait;
-    // #[async_trait]
-    // trait Perform: 'static {
-    //     async fn run<F, R>(f: F) -> anyhow::Result<R>
-    //     where
-    //         F: std::future::Future;
-    // }
-
-    // impl Perform for Ip {
-    //     async fn run<F, R>(f: F) -> anyhow::Result<R>
-    //     where
-    //         F: std::future::Future,
-    //     {
-
-    //     }
-    // }
-
-    // static INSTANCE: Lazy<Mutex<Vec<&'static dyn Perform>>> = Lazy::new(|| Mutex::new(Vec::new()));
-    static INSTANCE: Lazy<Mutex<Vec<Perform<String>>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
-    pub async fn get() -> Perform<String> {
-        let lock = INSTANCE.lock().await;
-        if let Some(first) = lock.first() {
-            return first.clone();
-        }
-        return Perform::None;
-    }
-    pub async fn add() -> anyhow::Result<()> {
-        let mut lock = INSTANCE.lock().await;
-        if lock.len() == 0 {
-            lock.push(Perform::Yet("テスト中".to_string()));
-        }
-        Ok(())
-    }
-    pub async fn pull() -> anyhow::Result<()> {
-        use super::Ip;
-        let response = reqwest::get("http://httpbin.org/ip")
-            .await?
-            .json::<Ip>()
-            .await?;
-        let mut lock = INSTANCE.lock().await;
-        if let Some(first) = lock.first_mut() {
-            *first = Perform::Already(response.origin);
-        }
-        Ok(())
+}
+impl<'a> Iterator for ContextIterator<'a> {
+    type Item = Ip;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().cloned()
     }
 }
 
-fn run() {
+async fn run() {
     console_error_panic_hook::set_once();
     wasm_logger::init(wasm_logger::Config::default());
 
-    log::trace!("some trace log");
-    log::debug!("some debug log");
-    log::info!("some info log");
-    log::warn!("some warn log");
-    log::error!("some error log");
+    let mut context = Context::new();
+    let ip = reqwest::get("http://httpbin.org/ip")
+        .await
+        .unwrap()
+        .json::<Ip>()
+        .await
+        .unwrap();
+    context.add(ip);
 
-    use space::Perform;
-    let mut origin: Perform<String> = Perform::None;
-    let fut = || async move {
-        // let mut ip: Option<&dyn Perform> = None;
-        assert!(space::get().await.is_none());
-        assert!(space::add().await.is_ok());
-        assert!(space::get().await.is_yet());
-        assert!(space::pull().await.is_ok());
-        origin = space::get().await;
-        assert!(origin.is_already());
-        log::debug!("ip.origin: {:?}", origin);
-
-        // 当然ですがコメントアウトを外すと、localhost:8080からの実行ではエラーになる
-        // しかし自動テストの方ではエラーにならない(処理が到達していないことがわかる)
-        // assert!(false);
-    };
-
-    wasm_bindgen_futures::spawn_local(fut());
+    for ip in context.iter() {
+        log::debug!("ip.origin: {:?}", ip.origin);
+    }
 }
 
 fn main() {
-    run();
+    wasm_bindgen_futures::spawn_local(run());
 }
 
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -138,5 +60,5 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 async fn first_test() {
-    run();
+    run().await;
 }
